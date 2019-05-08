@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+// StringFormatter service definition. 
+service LeftPadService {
+	// Formats the string.	
+	rpc left_pad(LeftPadInput) returns (LeftPadOutput) { }
+}
+
+message LeftPadInput {
+	string string_to_pad = 1;
+	uint32 len = 2;
+	string ch = 3;
+}
+
+message LeftPadOutput {
+	string result = 1;
+}
