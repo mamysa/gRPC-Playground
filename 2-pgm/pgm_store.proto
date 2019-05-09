@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+
+// StringFormatter service definition. 
+service PgmImageService {
+	// Formats the string.	
+	rpc write_image(stream PixelData) returns (Empty) { }
+	rpc get_image(GetImageInput) returns (stream PixelData) { }
+	rpc greyscale(stream PixelData) returns (stream PixelData) { }
+}
+
+message PixelData {
+	uint32 r = 1;
+	uint32 g = 2;
+	uint32 b = 3;
+}
+
+message GetImageInput {
+	string filename = 1;
+}
+
+message Empty { }
