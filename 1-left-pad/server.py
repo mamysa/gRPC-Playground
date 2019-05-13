@@ -5,16 +5,21 @@ from concurrent import futures
 import time
 
 class LeftPadImpl(left_pad_pb2_grpc.LeftPadServiceServicer):
+    # Create new subclass that extends *Servicer class in *_pb2_grpc.py and 
+    # implement it here.
     def left_pad(self, request, context):
-        #context.abort(grpc.StatusCode.INVALID_ARGUMENT, "oh no something went wrong")
         ch = ' ' if len(request.ch) == 0 else request.ch
-        print( 'Received string={}'.format(request.string_to_pad) )
+        print( 'Received string={} from peer {}'.format(request.string_to_pad, context.peer()) )
         padded = ch * request.len + request.string_to_pad
         return left_pad_pb2.LeftPadOutput(result=padded)
     
 def serve():
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))#, maximum_concurrent_rpcs=2)
-    server.add_insecure_port('[::]:50051')
+    # Create the server and assign a port. If there are no available threads to 
+    # process the request, said request will be queued.
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
+    server.add_insecure_port('localhost:50051')
+
+    # Register service implementation.
     left_pad_pb2_grpc.add_LeftPadServiceServicer_to_server(LeftPadImpl(), server)
     server.start()
     try:

@@ -1,11 +1,14 @@
 syntax = "proto3";
 
-// StringFormatter service definition. 
+// Interface specification.
 service LeftPadService {
-	// Formats the string.	
+	// pads the string.
 	rpc left_pad(LeftPadInput) returns (LeftPadOutput) { }
 }
 
+// Many other primitive types can be used:
+// double, float, int32/64 (variable length), string (unicode string), bytes, fixed32/64 (always 4/8 bytes), enums.
+// Structure of the message. 1/2/3 is the number of the field. Used for serialization.
 message LeftPadInput {
 	string string_to_pad = 1;
 	uint32 len = 2;
