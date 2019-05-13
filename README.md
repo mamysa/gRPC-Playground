@@ -109,13 +109,90 @@ $ python3 client.py
 00000pad me with zeros!!
 ```
 
+# Example 2 - Portable Pixmap streaming
+
+This example demonstrates streaming capabilities of gRPC by the means of the service that allows uploading and downloading images in PPM format as well as modifying them. 
 
 
+## Interface specification 
+gRPC supports four kinds of procedure calls (see `pgm_store.proto`). Note the use of `stream` keyword.
+
+1. Single message in - single message out (as seen in previous example).
+2. Single message in - sequence of messages out.
+
+```
+rpc get_image(GetImageInput) returns (stream PixelData) { }
+```
+
+2. Sequence of messages in - single message out.
+
+```
+rpc write_image(stream PixelData) returns (Empty) { }
+```
+
+3. Sequence of messages in - sequence of messages out.
+
+```
+rpc greyscale(stream PixelData) returns (stream PixelData) { }
+```
 
 
+## Implementation Details 
+
+When calling remote procedure that accepts sequence of messages iterator of said messages is required to be passed. That can be done quite easily by either calling `iter(message_list)` (where `message_list` is `Iterable`) or by using using generators: 
+
+```
+def send_pixel_data():
+	## ignore first 4 elements
+	for i in range(4, len(image_data), 3):
+		r = int(image_data[i+0])
+		g = int(image_data[i+1])
+		b = int(image_data[i+2])
+		yield pgm_store_pb2.PixelData(r=r, g=g, b=b)
+```
+
+Another topic of interest here is addition of metadata both client and servers can add additional metadata before messages are sent. Metadata is simply a list key-value pairs where both key and value are strings.
+
+```
+metadata = (('w', image_data[1]), 
+			('h', image_data[2]), 
+			('depth', image_data[3]),
+			('filename', filename))
+```
+
+Client calls the procedure as follows:
+
+```
+response = stub.write_image(send_pixel_data(), metadata=metadata)
+```
+
+Server can iterate over received metadata through `context` object. Context object can also be used to send metadata to the client:
+
+```
+# receive metadata
+for key, value in context.invocation_metadata():
+	print(key, value)
+
+# send metadata
+metadata = (('w', image_data[1]), 
+			('h', image_data[2]), 
+			('depth', image_data[3]))
+context.send_initial_metadata(metadata)
+```
+
+See `server.py` and `client.py` for more details!
+
+## Running the example
+Launch the server: `python3 server.py`. Client can be run with the following flags:
+
+1. `--send` - send `tux.png`. `server_tux.png` file will be written.
+2. `--recv` - receive `server_tux.png`. `client_tux.png` file will be written.
+3. `--grey` - stream `tux.png` to server, and write received greyscale image to `greyscale_tux.png`.
+
+## References for this section. 
+* https://grpc.io/docs/guides/concepts/
 
 
-# Example 2 - 2-ppm streaming
 
 # Example 3 - key value store 
 Demonstrate synchronization. Nothing too particularly exciting - use usual synchronization primitives provided by the language (e.g. mutexes). Argument of interest for `grpc.server` - `maximum_concurrent_rpcs`. Should be `<=` than number of threads, otherwise requests get queued.

@@ -1,7 +1,8 @@
 syntax = "proto3";
 
-
-// StringFormatter service definition. 
+// Aside from usual boring unary (1 message in - 1 message out), we can also pass multiple messages through stream / read sequence of messages from the stream.
+// Any combination of { unary, stream } works.
+// In Python generators are used to handle streams.
 service PgmImageService {
 	// Formats the string.	
 	rpc write_image(stream PixelData) returns (Empty) { }
