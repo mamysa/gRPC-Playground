@@ -6,46 +6,51 @@ import time
 from threading import Lock
 import os 
 
+def crash():
+    # sys.exit doesn't work in threads, probably for the same reason as exceptions which 
+    # the caller can observe. Use os.exit to kill EVERYTHING instead. :)
+    os._exit(1) 
+
 class KeyValueStoreImpl(kv_store_pb2_grpc.KeyValueStoreServiceServicer):
     def __init__(self):
         self.mutex = Lock()
         self.store = {} 
 
     def put_value(self, request, context):
-        time.sleep(2)
-        #os._exit(1)
+        time.sleep(3)
+        #crash() # oh no, we crash.
         self.mutex.acquire()
         print('Enter critical section')
         time.sleep(2)
-        #time.sleep(8)
         try:
             self.store[request.key] = request.value
         finally:
             self.mutex.release()
 
         print('Exit critical section')
-        status = kv_store_pb2.KeyValueResult.Value('OK')
-        return kv_store_pb2.Value(status=status, value=request.value)
+        return kv_store_pb2.Value(value=request.value)
 
     def get_value(self, request, context):
         time.sleep(4)
         self.mutex.acquire()
         try:
             val = self.store[request.key] 
-            status = kv_store_pb2.KeyValueResult.Value('OK')
-            ret = kv_store_pb2.Value(status=status, value=val)
+            ret = kv_store_pb2.Value(value=val)
         except KeyError:
-            #raise Exception( 'Invalid key {}'.format(request.key) )
-            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details( 'Invalid key {}'.format(request.key) )
+            # many different status codes - see here: 
+            # https://grpc.github.io/grpc/python/grpc.html#channel-connectivity
+
+            raise Exception( 'Invalid key {}'.format(request.key) )
+            #context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            #context.set_details( 'Invalid key {}'.format(request.key) )
             ret = kv_store_pb2.Value()
         finally:
             self.mutex.release()
         return  ret
     
 def serve():
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=2), maximum_concurrent_rpcs=1)
-    server.add_insecure_port('[::]:50050')
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1), maximum_concurrent_rpcs=1)
+    server.add_insecure_port('[::]:50051')
     kv_store_pb2_grpc.add_KeyValueStoreServiceServicer_to_server(KeyValueStoreImpl(), server)
     server.start()
     try:

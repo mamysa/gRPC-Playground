@@ -1,15 +1,10 @@
 syntax = "proto3";
 
-
-enum KeyValueResult {
-	OK = 0;
-	UNKNOWN_KEY = 1;
-}
-
-// StringFormatter service definition. 
+// Key value store.
 service KeyValueStoreService {
-	// Formats the string.	
+	// Store value
 	rpc put_value(PutValueInput) returns (Value) { }
+	// Get value
 	rpc get_value(GetValueInput) returns (Value) { }
 }
 
@@ -23,6 +18,5 @@ message PutValueInput {
 }
 
 message Value {
-	KeyValueResult status = 1; 
-	int64 value = 2;
+	int64 value = 1;
 }
