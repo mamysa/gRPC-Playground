@@ -99,6 +99,7 @@ Running examples in `1-left-pad` directory result in the following.
 
 ```
 $ python3 server.py
+Listening on port 50051
 Received string=pad me! from peer ipv6:[::1]:50146
 Received string=pad me with zeros!! from peer ipv6:[::1]:50146
 ```
@@ -108,6 +109,44 @@ $ python3 client.py
     pad me!
 00000pad me with zeros!!
 ```
+
+
+## Handling multiple connections and load-balancing With Nginx
+
+Connections to multiple servers can established by creating multiple channel objects and calling remote procedure as described previously.
+
+```
+with grpc.insecure_channel('localhost:50051') as channel1,\
+             grpc.insecure_channel('localhost:50052') as channel2:
+## call remote procedure(s) here as before
+```
+
+```
+$ python3 server -port 50051
+Listening on port 50051
+Received string=pad me! from peer ipv6:[::1]:35552
+```
+
+TODO describe
+```
+$ python3 server -port 50052
+Listening on port 50052
+Received string=pad me with zeros!! from peer ipv6:[::1]:48626
+```
+
+TODO describe 
+
+```
+$ python3 client.py --multi
+    pad me!
+00000pad me with zeros!!
+```
+
+
+Copy config file to `/usr/share/nginx` directory, and run `sudo nginx -c <config_file_name>`. To stop running nginx instance, `sudo nginx -s stop`.
+
+In config, nginx server is running on port 505000. Run several instances of `server.py` bound to ports `505001` and `50002` and run `client.py` a couple of times to see round-robin load balancing in action.
+
 
 # Example 2 - Portable Pixmap streaming
 
@@ -194,13 +233,61 @@ Launch the server: `python3 server.py`. Client can be run with the following fla
 
 
 
-# Example 3 - key value store 
-Demonstrate synchronization. Nothing too particularly exciting - use usual synchronization primitives provided by the language (e.g. mutexes). Argument of interest for `grpc.server` - `maximum_concurrent_rpcs`. Should be `<=` than number of threads, otherwise requests get queued.
+##  Example 3 - key-value-store
 
-## Load Balancing With Nginx
-Copy config file to `/usr/share/nginx` directory, and run `sudo nginx -c <config_file_name>`. To stop running nginx instance, `sudo nginx -s stop`.
+This example demonstrates concurrent writes to key-value store which stores simple string-integer pairs as well as error handling. Files of interest are located in `3-key-value-store directory`.
 
-In config, nginx server is running on port 505000. Run several instances of `server.py` bound to ports `505001` and `50002` and run `client.py` a couple of times to see round-robin load balancing in action.
+
+## Concurrent data modification
+Concurrent data modification can be handled with either synchronization primitives provided by languages (e.g.  mutexes) or providing `maximum_concurrent_rpcs` argument when instantiating `grpc.server`. It will ensure that only specified number of procedure calls can run concurrently and any new RPC attempts will be discarded without queueing incoming request. `maximum_concurrent_rpcs` should be less or equal to number of worker threads otherwise requests get queued, as expected.
+
+Here's an example execution. Start `server.py` first and then launch clients.
+
+```
+$ python3 server.py -sleep 5
+Peer ipv6:[::1]:35578 enters critical section with key=x value=15
+Peer ipv6:[::1]:35578 exits critical section
+```
+
+```
+$ python3 client.py  --put -key x -val 15
+15 // value we have written!
+```
+
+If another client connects before previous procedure call completes, he will receive the following message : 
+
+```
+$ python3 client.py  --put -key y -val 44
+RpcError caught, code: StatusCode.RESOURCE_EXHAUSTED details: Concurrent RPC limit exceeded!
+```
+
+## Exception handling 
+
+In case if remote procedure throws an exception, information about exception gets transmitted to clients. Exceptions can be handled manually by using server's `context` object where status code and details can be explicitly set. 
+
+```
+try:
+	val = self.store[request.key] 
+	ret = kv_store_pb2.Value(value=val)
+except KeyError:
+	context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+	context.set_details( 'Invalid key {}'.format(request.key) )
+	ret = kv_store_pb2.Value()
+```
+
+More status codes can be found [here](https://grpc.github.io/grpc/python/grpc.html#channel-connectivity). 
+
+Starting the server `python3 server.py` and launching `python3 client.py --get -key x` will result in the following message delivered to client as expected from code snippet above.
+
+```
+RpcError caught, code: StatusCode.INVALID_ARGUMENT details: Invalid key x
+```
+
+
+
+
+
+
 
 
 

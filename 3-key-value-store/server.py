@@ -5,11 +5,8 @@ from concurrent import futures
 import time
 from threading import Lock
 import os 
+import argparse
 
-def crash():
-    # sys.exit doesn't work in threads, probably for the same reason as exceptions which 
-    # the caller can observe. Use os.exit to kill EVERYTHING instead. :)
-    os._exit(1) 
 
 class KeyValueStoreImpl(kv_store_pb2_grpc.KeyValueStoreServiceServicer):
     def __init__(self):
@@ -17,35 +14,27 @@ class KeyValueStoreImpl(kv_store_pb2_grpc.KeyValueStoreServiceServicer):
         self.store = {} 
 
     def put_value(self, request, context):
-        time.sleep(3)
-        #crash() # oh no, we crash.
         self.mutex.acquire()
-        print('Enter critical section')
-        time.sleep(2)
+        print('Peer {} enters critical section with key={} value={}'.format(context.peer(), request.key, request.value))
+        time.sleep(args.sleep)
         try:
             self.store[request.key] = request.value
         finally:
             self.mutex.release()
-
-        print('Exit critical section')
+            print('Peer {} exits critical section'.format(context.peer()))
         return kv_store_pb2.Value(value=request.value)
 
     def get_value(self, request, context):
-        time.sleep(4)
-        self.mutex.acquire()
+        thread.sleep(args.sleep)
         try:
             val = self.store[request.key] 
             ret = kv_store_pb2.Value(value=val)
         except KeyError:
-            # many different status codes - see here: 
-            # https://grpc.github.io/grpc/python/grpc.html#channel-connectivity
-
-            raise Exception( 'Invalid key {}'.format(request.key) )
-            #context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            #context.set_details( 'Invalid key {}'.format(request.key) )
+            # can raise exception instead. (might be python specific though! [X] doubt)
+            #raise Exception( 'Invalid key {}'.format(request.key) )
+            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            context.set_details( 'Invalid key {}'.format(request.key) )
             ret = kv_store_pb2.Value()
-        finally:
-            self.mutex.release()
         return  ret
     
 def serve():
@@ -60,4 +49,7 @@ def serve():
         server.stop(0)
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-sleep', type=int, default=0, help='Sleep while client is in critical section (in seconds)')
+    args = parser.parse_args()
     serve()

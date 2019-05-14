@@ -33,6 +33,17 @@ def write_image(stub, filename):
 def get_image(stub, filename):
     argument = pgm_store_pb2.GetImageInput(filename=filename)
     response = stub.get_image(argument)
+    
+    # iterating over responses might may raise grpcError.
+    # Should try accessing response before accessing metadata.
+    image_data = []
+    num_pixels = 1
+    for rgb in response: 
+        image_data.append(str(rgb.r))
+        image_data.append(str(rgb.g))
+        image_data.append(str(rgb.b))
+        print('Received {}'.format(num_pixels))
+        num_pixels += 1
 
     w = None; h = None; depth  = None;
     for key, value in response.initial_metadata():
@@ -43,15 +54,8 @@ def get_image(stub, filename):
     if not w: raise Exception('missing w')
     if not h: raise Exception('missing h')
     if not depth: raise Exception('missing depth ')
-    image_data = ['P3', w, h, depth]
 
-    num_pixels = 1
-    for rgb in response: 
-        image_data.append(str(rgb.r))
-        image_data.append(str(rgb.g))
-        image_data.append(str(rgb.b))
-        print('Received {}'.format(num_pixels))
-        num_pixels += 1
+    image_data = ['P3', w, h, depth] + image_data
     ppm.write_image('client_'+filename, image_data)
 
 def greyscale(stub, filename):
@@ -86,7 +90,6 @@ def run():
     with grpc.insecure_channel('localhost:50051') as channel:
         stub = pgm_store_pb2_grpc.PgmImageServiceStub(channel)
         try:
-            pass
             if CLIARGS.send: write_image(stub, 'tux.ppm')
             if CLIARGS.recv: get_image(stub, 'tux.ppm')
             if CLIARGS.grey: greyscale(stub, 'tux.ppm')
