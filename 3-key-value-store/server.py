@@ -25,7 +25,7 @@ class KeyValueStoreImpl(kv_store_pb2_grpc.KeyValueStoreServiceServicer):
         return kv_store_pb2.Value(value=request.value)
 
     def get_value(self, request, context):
-        thread.sleep(args.sleep)
+        time.sleep(args.sleep)
         try:
             val = self.store[request.key] 
             ret = kv_store_pb2.Value(value=val)
