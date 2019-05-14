@@ -232,14 +232,19 @@ Launch the server: `python3 server.py`. Client can be run with the following fla
 * https://grpc.io/docs/guides/concepts/
 
 
-
-##  Example 3 - key-value-store
+#  Example 3 - key-value-store
 
 This example demonstrates concurrent writes to key-value store which stores simple string-integer pairs as well as error handling. Files of interest are located in `3-key-value-store directory`.
 
 
 ## Concurrent data modification
-Concurrent data modification can be handled with either synchronization primitives provided by languages (e.g.  mutexes) or providing `maximum_concurrent_rpcs` argument when instantiating `grpc.server`. It will ensure that only specified number of procedure calls can run concurrently and any new RPC attempts will be discarded without queueing incoming request. `maximum_concurrent_rpcs` should be less or equal to number of worker threads otherwise requests get queued, as expected.
+Concurrent data modification can be handled with either synchronization primitives provided by languages (e.g.  mutexes) or providing `maximum_concurrent_rpcs` argument when instantiating `grpc.server`. 
+
+```
+server = grpc.server(futures.ThreadPoolExecutor(max_workers=1), maximum_concurrent_rpcs=1)
+```
+
+It will ensure that only specified number of procedure calls can run concurrently and any new RPC attempts will be discarded without queueing incoming request. `maximum_concurrent_rpcs` should be less or equal to number of worker threads otherwise requests get queued, as expected.
 
 Here's an example execution. Start `server.py` first and then launch clients.
 
@@ -254,7 +259,7 @@ $ python3 client.py  --put -key x -val 15
 15 // value we have written!
 ```
 
-If another client connects before previous procedure call completes, he will receive the following message : 
+If another client happens to call a procedure before previous procedure call completes, he will receive the following message : 
 
 ```
 $ python3 client.py  --put -key y -val 44
@@ -285,21 +290,82 @@ RpcError caught, code: StatusCode.INVALID_ARGUMENT details: Invalid key x
 
 
 
+# Example 4 - key-value store v2.
+
+Revelant files to this example are located in `3-key-value-store` and `4-key-value-store-v2`.
+
+This particular example modifies functionality provided by key-value store seen in Example 3 and demonstrates backward and forward compatibility. Instead of taking a single integer as an input, new version of key-value store may take a pair of integers and perform computation involving those (add or multiply) prior to storing the final value. 
+
+proto3 specification for `4-key-value-store-v2` example is listed below. Only two changes from specification of `3-key-value-store` are 1. the addition of another `int64` field and 2. addition of operator to act on inputs.
+
+```
+enum Operator {
+		ASSIGN = 0;
+		ADD = 1;
+		MUL = 2;
+}
+
+// Key value V2 store. New interface allows passing two values and perfoming operations 
+// on them before adding them to the key-value store 
+service KeyValueStoreService {
+	// Store value
+	rpc put_value(PutValueInput) returns (Value) { }
+	// Get value
+	rpc get_value(GetValueInput) returns (Value) { }
+}
+
+message GetValueInput {
+	string key = 1;
+}
+
+message PutValueInput {
+	string key = 1;
+	int64 val1 = 2;
+	// Adding new fields is allowed.
+	int64 val2 = 3;
+	Operator op = 4; 
+}
+
+message Value {
+	int64 value = 1;
+}
+```
+TODO explain doc
+* https://developers.google.com/protocol-buffers/docs/proto3#updating
 
 
+## Running examples
 
+Backward compatibility.
+```
+$ python3 4-key-value-store-v2/server.py
+Running KVStoreV2
+Peer ipv6:[::1]:35714 enters critical section with key=x val1=12 val2=0 op=0
+Peer ipv6:[::1]:35714 exits critical section
+```
 
+```
+python3 3-key-value-store/client.py --get -key x 
+12
+python3 3-key-value-store/client.py --put -key x -val 12
+12
+```
 
+Forward compatibility:
 
+```
+$ python3 3-key-value-store/server.py
+Peer ipv6:[::1]:35734 enters critical section with key=x value=5
+Peer ipv6:[::1]:35734 exits critical section
+! we don't print anything for get_key
+```
 
-# Example 4 - add new field to message.
-
-1. Comment out `string_value` in `PutValueInput` and `Value` messages.
-
-todo add error codes
-
-
-
+```
+$ python3 4-key-value-store-v2/client.py --put -val1 5 -val2 8 -key x --add
+5 
+python3 4-key-value-store-v2/client.py --get -key x
+5
+```
 
 ## Todo
 * Try out interceptors. 
