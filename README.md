@@ -1,15 +1,24 @@
 # gRPC Playground
-gRPC is a remote procedure call framework developed by Google. It uses protobuf (protocol buffers) as interface definition language (by default) and uses HTTP/2 protocol for exchanging messages (i.e. binary protocol and allows for multiplexing (multiple requests can be served through single TCP connection). gRPC supports many different programming languages such as Java/C++/Python, etc.
+gRPC is a remote procedure call framework developed by Google. It uses protobuf (protocol buffers) as interface definition language (by default) and uses HTTP/2 protocol for exchanging messages (i.e. binary protocol and allows for multiplexing (multiple requests can be served through single TCP connection). gRPC supports many different programming languages such as Java, C++ and Python.
 
 1. Specify data types and services using specification language.
 2. Compile specification into language of choice.  
 3. Implement functionality behind the interface. 
-4. Call desired interface. 
-5. ???
-6. Profit!
+4. Call desired procedure. 
 
+The demo consists of four parts.
 
+* Example 1 - Left Pad shows an example of simple RPC.
+* Example 2 - Portable Pixmap streaming demonstrates streaming capabilities of gRPC.
+* Example 3 and Example 4 - Key-Value store demonstrate synchronization and interface compatibility.
 
+# Installation 
+For the demo Python will be used. gRPC can be installed using `pip`.
+
+```
+$ python -m pip install grpcio
+$ python -m pip install grpcio-tools
+```
 
 # Example 1 - Left Pad 
 
@@ -38,11 +47,6 @@ message LeftPadOutput {
 
 In the example above, `LeftPadService` contains a single procedure that takes message of type `LeftPadInput` and returns `LeftPadOutput`. Messages can be composed of various primitive types such as `int32`, `float`, `string` as well as other messages. Each field in the message has a unique number that is used to identify fields a message when it is serialized. It is not necessary to assign values to every field - if certain field is missing in serialized message a default value will be assigned to it. Default values specific to each type.
 
-
-References for this section -- 
-
-https://developers.google.com/protocol-buffers/docs/proto3#services
-https://developers.google.com/protocol-buffers/docs/proto3#default
 
 
 ## Compiling .proto
@@ -121,20 +125,19 @@ with grpc.insecure_channel('localhost:50051') as channel1,\
 ## call remote procedure(s) here as before
 ```
 
+In the example below the client makes two procedure calls that connect to different servers. 
+
 ```
 $ python3 server -port 50051
 Listening on port 50051
 Received string=pad me! from peer ipv6:[::1]:35552
 ```
 
-TODO describe
 ```
 $ python3 server -port 50052
 Listening on port 50052
 Received string=pad me with zeros!! from peer ipv6:[::1]:48626
 ```
-
-TODO describe 
 
 ```
 $ python3 client.py --multi
@@ -142,10 +145,50 @@ $ python3 client.py --multi
 00000pad me with zeros!!
 ```
 
+There's no need for client to connect to two servers that provide the same functionality (and expose their IP addresses!). It is possible to use nginx to route requests to different servers and perform load-balancing. Configuration for nginx looks like this: 
 
-Copy config file to `/usr/share/nginx` directory, and run `sudo nginx -c <config_file_name>`. To stop running nginx instance, `sudo nginx -s stop`.
+```
+events { }
+http {
+	upstream leftpad_app {
+		server 127.0.0.1:50051;
+		server 127.0.0.1:50052;
+	}
 
-In config, nginx server is running on port 505000. Run several instances of `server.py` bound to ports `505001` and `50002` and run `client.py` a couple of times to see round-robin load balancing in action.
+	server {
+		listen 50050 http2;
+		location / {
+			grpc_pass grpc://leftpad_app;
+		}
+	}
+}
+```
+
+First, two instances of gRPC server are specified in `leftpad_app` group. All requests arriving to the server are proxied to servers specified `leftpad_app`. By default, round-robin scheduling is used.
+
+To run the example, you may need to copy provided configuration file to `/usr/share/nginx` directory, and run `sudo nginx -c nginx-load-balance.conf`. 
+
+Start couple of servers and bind them to ports `50051` and `50052` and then run the client. As client calls the remote procedure twice, both servers will used. Here's expected output: 
+
+```
+$ python3 server.py --port 50051
+Listening on port 50051
+Received string=pad me! from peer ipv4:127.0.0.1:54376
+```
+
+```
+$ python3 server.py --port 50052
+Listening on port 50051
+Received string=pad me! from peer ipv4:127.0.0.1:54376
+```
+
+```
+$ python client.py --port 50050
+    pad me!
+00000pad me with zeros!!
+```
+
+To stop running nginx instance, use `sudo nginx -s stop`.
 
 
 # Example 2 - Portable Pixmap streaming
@@ -228,14 +271,35 @@ Launch the server: `python3 server.py`. Client can be run with the following fla
 2. `--recv` - receive `server_tux.png`. `client_tux.png` file will be written.
 3. `--grey` - stream `tux.png` to server, and write received greyscale image to `greyscale_tux.png`.
 
-## References for this section. 
-* https://grpc.io/docs/guides/concepts/
 
 
-#  Example 3 - key-value-store
+# Example 3 - key-value-store
 
-This example demonstrates concurrent writes to key-value store which stores simple string-integer pairs as well as error handling. Files of interest are located in `3-key-value-store directory`.
+This example demonstrates concurrent writes to key-value store which stores simple string-integer pairs as well as error handling. Files of interest are located in `3-key-value-store` directory.
 
+A client can call `put_value` and `get_value` procedures. `put_value` expects a message containing a `string` and `int64` and returns most recently stored value (i.e. also an `int64`). `get_value` expects a message containing a `string` and also returns `int64`. Full specification can be found in `kv_store.proto` file.
+
+```
+syntax = "proto3";
+
+service KeyValueStoreService {
+	rpc put_value(PutValueInput) returns (Value) { }
+	rpc get_value(GetValueInput) returns (Value) { }
+}
+
+message GetValueInput {
+	string key = 1;
+}
+
+message PutValueInput {
+	string key = 1;
+	int64 value = 2;
+}
+
+message Value {
+	int64 value = 1;
+}
+```
 
 ## Concurrent data modification
 Concurrent data modification can be handled with either synchronization primitives provided by languages (e.g.  mutexes) or providing `maximum_concurrent_rpcs` argument when instantiating `grpc.server`. 
@@ -298,6 +362,8 @@ This particular example modifies functionality provided by key-value store seen 
 
 proto3 specification for `4-key-value-store-v2` example is listed below. Only two changes from specification of `3-key-value-store` are 1. the addition of another `int64` field and 2. addition of operator to act on inputs.
 
+If `ASSIGN` operator is provided then only `val1` is stored in the key-value store.
+
 ```
 enum Operator {
 		ASSIGN = 0;
@@ -305,12 +371,8 @@ enum Operator {
 		MUL = 2;
 }
 
-// Key value V2 store. New interface allows passing two values and perfoming operations 
-// on them before adding them to the key-value store 
 service KeyValueStoreService {
-	// Store value
 	rpc put_value(PutValueInput) returns (Value) { }
-	// Get value
 	rpc get_value(GetValueInput) returns (Value) { }
 }
 
@@ -330,8 +392,12 @@ message Value {
 	int64 value = 1;
 }
 ```
-TODO explain doc
-* https://developers.google.com/protocol-buffers/docs/proto3#updating
+
+Such addition doesn't break compatibility. 
+
+* **Backward compatibility** (V1 client - V2 server) -client is not aware of new fields and server will replace missing fields with default values.
+* **Forward compatibility** (V2 client - V1 server) - since binary message is still well-formed, unknown fields can be ignored.
+
 
 
 ## Running examples
@@ -345,9 +411,9 @@ Peer ipv6:[::1]:35714 exits critical section
 ```
 
 ```
-python3 3-key-value-store/client.py --get -key x 
+$ python3 3-key-value-store/client.py --get -key x 
 12
-python3 3-key-value-store/client.py --put -key x -val 12
+$ python3 3-key-value-store/client.py --put -key x -val 12
 12
 ```
 
@@ -367,8 +433,21 @@ python3 4-key-value-store-v2/client.py --get -key x
 5
 ```
 
-## Todo
-* Try out interceptors. 
-* A bit more interesting examples. 
-* Service failure handling.
-* Add more things to the todo list :))
+# References
+Grpc introduction.
+* https://grpc.io/docs/guides/concepts/
+
+Grpc installation.
+* https://grpc.io/blog/installation/
+* https://grpc.io/docs/quickstart/python/
+
+Protocol buffers service specification and default values.
+https://developers.google.com/protocol-buffers/docs/proto3#services
+https://developers.google.com/protocol-buffers/docs/proto3#default
+
+Protocol buffers message updating and compatibility.
+* https://developers.google.com/protocol-buffers/docs/proto3#updating
+* https://developers.google.com/protocol-buffers/docs/proto3#unknowns
+
+gRPC Python Reference
+* https://grpc.github.io/grpc/python/

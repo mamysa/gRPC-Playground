@@ -22,7 +22,7 @@ def run():
             except grpc.RpcError as e:
                 print('RpcError caught, code: {} details: {}'.format(e.code(), e.details()))
     else:
-        with grpc.insecure_channel('localhost:50051') as channel:
+        with grpc.insecure_channel('localhost:{}'.format(args.port)) as channel:
             try:
                 print( left_pad(channel, 'pad me!', 4, ' ' ) )
                 print( left_pad(channel, 'pad me with zeros!!', 5, '0') )
@@ -33,5 +33,7 @@ def run():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--multi', action='store_true', help='Establish connection two two servers listening on ports 50051 and 50052')
+    parser.add_argument('--port', type=int, default=50051, help='Port of the server')
     args = parser.parse_args()
     run()
+
