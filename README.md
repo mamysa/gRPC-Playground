@@ -28,7 +28,7 @@ Example of single message in - single message out RPC. Relevant files for this a
 
 `left_pad.proto` file contains RPC function declaration, definitions of an input message and output message. 
 
-```
+```proto
 service LeftPadService {
 	rpc left_pad(LeftPadInput) returns (LeftPadOutput) { }
 }
@@ -45,7 +45,7 @@ message LeftPadOutput {
 }
 ```
 
-In the example above, `LeftPadService` contains a single procedure that takes message of type `LeftPadInput` and returns `LeftPadOutput`. Messages can be composed of various primitive types such as `int32`, `float`, `string` as well as other messages. Each field in the message has a unique number that is used to identify fields a message when it is serialized. It is not necessary to assign values to every field - if certain field is missing in serialized message a default value will be assigned to it. Default values specific to each type.
+In the example above, `LeftPadService` contains a single procedure that takes message of type `LeftPadInput` and returns `LeftPadOutput`. Messages can be composed of various primitive types such as `int32`, `float`, `string` as well as other messages. Each field in the message has a unique number that is used to identify fields a message when it is serialized. It is not necessary to assign values to every field - if a certain field is missing in serialized message a default value will be assigned to it. Default values specific to each type.
 
 
 
@@ -55,14 +55,14 @@ In the example above, `LeftPadService` contains a single procedure that takes me
 python3 -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. left_pad.proto`
 ```
 
-Two files will be generated. `left_pad_pb2.py` defines all data types (and in case of Python it's not particularly readable...); `left_pad_pb2_grpc.py` defines  1. the stub for client to call (`LeftPadServiceStub`) and 2. `LeftPadServiceServicer` which is used implement desired RPC functionality.
+Two files will be generated. `left_pad_pb2.py` defines all data types (and in case of Python it's not particularly readable...); `left_pad_pb2_grpc.py` defines  **1.** the stub for client to call (`LeftPadServiceStub`) and **2.** `LeftPadServiceServicer` which is used implement desired RPC functionality.
 
 ## Server Implementation
 Server functionality can be seen in `server.py`.
 
 First, implement `left_pad` procedure by subclassing `LeftPadServiceServicer` class found in `left_pad_pb2_grpc.py`.
 
-```
+```python
 class LeftPadImpl(left_pad_pb2_grpc.LeftPadServiceServicer):
     def left_pad(self, request, context):
         ch = ' ' if len(request.ch) == 0 else request.ch
@@ -73,7 +73,7 @@ class LeftPadImpl(left_pad_pb2_grpc.LeftPadServiceServicer):
 
 The server itself is created in the following way.  
 
-```
+```python
 server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
 server.add_insecure_port('localhost:50051')
 left_pad_pb2_grpc.add_LeftPadServiceServicer_to_server(LeftPadImpl(), server)
@@ -90,7 +90,7 @@ Line by line breakdown:
 ## Client Implementation
 Client functionality can be seen in `client.py`. Few notable things here are the creation of the connection to the server (line 1), creation of the message (2) and procedure invocation itself (lines 3, 4). 
 
-```
+```python
 with grpc.insecure_channel('localhost:50051') as channel:
     args = left_pad_pb2.LeftPadInput(string_to_pad=string_to_pad, len=length, ch=ch)
 	stub = left_pad_pb2_grpc.LeftPadServiceStub(channel)
@@ -223,7 +223,7 @@ rpc greyscale(stream PixelData) returns (stream PixelData) { }
 
 When calling remote procedure that accepts sequence of messages iterator of said messages is required to be passed. That can be done quite easily by either calling `iter(message_list)` (where `message_list` is `Iterable`) or by using using generators: 
 
-```
+```python
 def send_pixel_data():
 	## ignore first 4 elements
 	for i in range(4, len(image_data), 3):
@@ -235,7 +235,7 @@ def send_pixel_data():
 
 Another topic of interest here is addition of metadata both client and servers can add additional metadata before messages are sent. Metadata is simply a list key-value pairs where both key and value are strings.
 
-```
+```python
 metadata = (('w', image_data[1]), 
 			('h', image_data[2]), 
 			('depth', image_data[3]),
@@ -250,7 +250,7 @@ response = stub.write_image(send_pixel_data(), metadata=metadata)
 
 Server can iterate over received metadata through `context` object. Context object can also be used to send metadata to the client:
 
-```
+```python
 # receive metadata
 for key, value in context.invocation_metadata():
 	print(key, value)
@@ -277,9 +277,9 @@ Launch the server: `python3 server.py`. Client can be run with the following fla
 
 This example demonstrates concurrent writes to key-value store which stores simple string-integer pairs as well as error handling. Files of interest are located in `3-key-value-store` directory.
 
-A client can call `put_value` and `get_value` procedures. `put_value` expects a message containing a `string` and `int64` and returns most recently stored value (i.e. also an `int64`). `get_value` expects a message containing a `string` and also returns `int64`. Full specification can be found in `kv_store.proto` file.
+A client can call `put_value` and `get_value` procedures. `put_value` expects a message containing a `string` and `int64` and returns most recently stored value (i.e. `int64`). `get_value` expects a message containing a `string` and also returns `int64`. Full specification can be found in `kv_store.proto` file.
 
-```
+```proto
 syntax = "proto3";
 
 service KeyValueStoreService {
@@ -334,7 +334,7 @@ RpcError caught, code: StatusCode.RESOURCE_EXHAUSTED details: Concurrent RPC lim
 
 In case if remote procedure throws an exception, information about exception gets transmitted to clients. Exceptions can be handled manually by using server's `context` object where status code and details can be explicitly set. 
 
-```
+```python
 try:
 	val = self.store[request.key] 
 	ret = kv_store_pb2.Value(value=val)
@@ -352,11 +352,9 @@ Starting the server `python3 server.py` and launching `python3 client.py --get -
 RpcError caught, code: StatusCode.INVALID_ARGUMENT details: Invalid key x
 ```
 
-
-
 # Example 4 - key-value store v2.
 
-Revelant files to this example are located in `3-key-value-store` and `4-key-value-store-v2`.
+Relevant files to this example are located in `3-key-value-store` and `4-key-value-store-v2`.
 
 This particular example modifies functionality provided by key-value store seen in Example 3 and demonstrates backward and forward compatibility. Instead of taking a single integer as an input, new version of key-value store may take a pair of integers and perform computation involving those (add or multiply) prior to storing the final value. 
 
@@ -364,7 +362,7 @@ proto3 specification for `4-key-value-store-v2` example is listed below. Only tw
 
 If `ASSIGN` operator is provided then only `val1` is stored in the key-value store.
 
-```
+```proto
 enum Operator {
 		ASSIGN = 0;
 		ADD = 1;
@@ -395,7 +393,7 @@ message Value {
 
 Such addition doesn't break compatibility. 
 
-* **Backward compatibility** (V1 client - V2 server) -client is not aware of new fields and server will replace missing fields with default values.
+* **Backward compatibility** (V1 client - V2 server) - client is not aware of new fields and server will replace missing fields with default values.
 * **Forward compatibility** (V2 client - V1 server) - since binary message is still well-formed, unknown fields can be ignored.
 
 
@@ -411,9 +409,9 @@ Peer ipv6:[::1]:35714 exits critical section
 ```
 
 ```
-$ python3 3-key-value-store/client.py --get -key x 
-12
 $ python3 3-key-value-store/client.py --put -key x -val 12
+12
+$ python3 3-key-value-store/client.py --get -key x 
 12
 ```
 
@@ -434,20 +432,27 @@ python3 4-key-value-store-v2/client.py --get -key x
 ```
 
 # References
-Grpc introduction.
+
+##  Grpc introduction.
+
 * https://grpc.io/docs/guides/concepts/
 
-Grpc installation.
+### Grpc installation.
+
 * https://grpc.io/blog/installation/
 * https://grpc.io/docs/quickstart/python/
 
-Protocol buffers service specification and default values.
-https://developers.google.com/protocol-buffers/docs/proto3#services
-https://developers.google.com/protocol-buffers/docs/proto3#default
+### Protocol buffers service specification and default values.
+* https://developers.google.com/protocol-buffers/docs/proto3#services
+* https://developers.google.com/protocol-buffers/docs/proto3#default
 
-Protocol buffers message updating and compatibility.
+
+### Protocol buffers message updating and compatibility.
 * https://developers.google.com/protocol-buffers/docs/proto3#updating
 * https://developers.google.com/protocol-buffers/docs/proto3#unknowns
 
-gRPC Python Reference
+### gRPC Python Reference
 * https://grpc.github.io/grpc/python/
+
+### NGINX
+* https://www.nginx.com/
