@@ -1,5 +1,5 @@
 # gRPC Playground
-gRPC is a remote procedure call framework developed by Google. It uses protobuf (protocol buffers) as interface definition language (by default) and uses HTTP/2 protocol for exchanging messages (i.e. binary protocol and allows for multiplexing (multiple requests can be served through single TCP connection). gRPC supports many different programming languages such as Java, C++ and Python.
+gRPC is a remote procedure call framework developed by Google. It uses protobuf (protocol buffers) as interface definition language (by default) and uses HTTP/2 protocol for exchanging messages (i.e. binary protocol and allows for multiplexing - multiple requests can be served through a single TCP connection). gRPC supports many different programming languages such as Java, C++ and Python.
 
 1. Specify data types and services using specification language.
 2. Compile specification into language of choice.  
